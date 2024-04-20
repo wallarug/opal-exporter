@@ -10,10 +10,10 @@ BEARER_TOKEN = ""
 HEADERS = {
     "Authorization": "Bearer " + BEARER_TOKEN
 }
-START_YEAR = 2019  #2018
-END_YEAR = 2019    #2024
+START_YEAR = 2018  #2018
+END_YEAR = 2025    #2024
 
-# 3085220041932696?start=0&nr=500&from=2019-04-01&to=2019-04-30&sort=
+# 0000000000000000?start=0&nr=500&from=2019-04-01&to=2019-04-30&sort=
 
 # Create a Activity class with month and year
 class Activity:
@@ -60,11 +60,11 @@ def get_card_info():
     response = requests.get(API_DOMAIN + API_CARDINFO_ENDPOINT, headers=HEADERS)
 
     # sort out the request and get the card numbers into a list
-    ## Structure:  { "SmartcardDetails" : [ { "CardNickname" : "", "SmartcardId" : 0000000000000000, "CardState" : "BLOCKED|ISSUED|HOTLISTED" },  ] }
+    ## Structure:  { "SmartcardDetails" : [ { "CardNickName" : "", "SmartcardId" : 0000000000000000, "CardState" : "BLOCKED|ISSUED|HOTLISTED" },  ] }
     cards = []
 
     for card in response.json()["SmartcardDetails"]:
-        cards.append(Smartcard(card["SmartcardId"], card["CardState"], card["CardNickname"]))
+        cards.append(Smartcard(card["SmartcardId"], card["CardState"], card["CardNickName"]))
 
     print(cards)
 
@@ -74,28 +74,45 @@ def get_card_info():
 ## Get activity for a card in month, year
 def get_card_activity_month(card_number, month, year):
     # define the start and end date.  Must be in format YYYY-MM-DD
-    start_date = f"{year}-{month}-01"
+    if month < 10:
+        start_date = f"{year}-0{month}-01"
+    else:
+        start_date = f"{year}-{month}-01"
     
     # account for months with 28, 29 (leap year), 30, 31 days
     if month == 2:
         if year % 4 == 0:
-            end_date = f"{year}-{month}-29"
+            end_date = f"{year}-0{month}-29"
         else:
-            end_date = f"{year}-{month}-28"
+            end_date = f"{year}-0{month}-28"
     elif month in [4, 6, 9, 11]:
-        end_date = f"{year}-{month}-30"
+        if month < 10:
+            end_date = f"{year}-0{month}-30"
+        else:
+            end_date = f"{year}-{month}-30"
     else:
-        end_date = f"{year}-{month}-31"
+        if month < 10:
+            end_date = f"{year}-0{month}-31"
+        else:
+            end_date = f"{year}-{month}-31"
 
-    response = requests.get(API_DOMAIN + API_ACTIVITY_ENDPOINT + card_number + "?start=0&nr=500&from=" + start_date + "&to=" + end_date, headers=HEADERS)
+    # format the start and end dates with YYYY-MM-DD (adding in zeros for single digit months and days)
+    
+
+    response = requests.get(API_DOMAIN + API_ACTIVITY_ENDPOINT + str(card_number) + "?start=0&nr=500&from=" + start_date + "&to=" + end_date, headers=HEADERS)
 
     # summarise the response into monthly total based on the results
     ## Results format:  { SmartcardActivityDetail : [ { "Amount" : -275, }, ]}
     ## Amount is in cents, only count negative amounts
     total = 0
-    for activity in response.json()["SmartcardActivityDetail"]:
-        if activity["Amount"] < 0:
-            total += activity["Amount"]
+    try:
+        for activity in response.json()["SmartcardActivityDetail"]:
+            if activity["Amount"] < 0:
+                total += activity["Amount"]
+    except KeyError:
+        print(f"No activity for {card_number} in {month}-{year}")
+
+    total = total / 100 * -1
 
     return total
 
@@ -114,7 +131,7 @@ def run_monthly_activity():
                 # Store the result
                 card.add_activity(month, year, get_card_activity_month(card.number(), month, year))
                 print(card.monthly_activity[f'{month}-{year}'])
-                sleep(1)
+                sleep(0.1)
 
     
     # Header: Dates, Card 1, Card 2, Card 3, ...
